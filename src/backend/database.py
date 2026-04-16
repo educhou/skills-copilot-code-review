@@ -184,6 +184,28 @@ initial_activities = {
         },
         "max_participants": 16,
         "participants": ["william@mergington.edu", "jacob@mergington.edu"]
+    },
+    "Photography Club": {
+        "description": "Learn photography basics, editing, and visual storytelling",
+        "schedule": "Wednesdays, 7:00 AM - 8:00 AM",
+        "schedule_details": {
+            "days": ["Wednesday"],
+            "start_time": "07:00",
+            "end_time": "08:00"
+        },
+        "max_participants": 14,
+        "participants": ["abigail@mergington.edu", "henry@mergington.edu"]
+    },
+    "Environmental Club": {
+        "description": "Lead campus sustainability projects and community cleanups",
+        "schedule": "Thursdays, 7:00 AM - 8:00 AM",
+        "schedule_details": {
+            "days": ["Thursday"],
+            "start_time": "07:00",
+            "end_time": "08:00"
+        },
+        "max_participants": 18,
+        "participants": ["zoe@mergington.edu", "samuel@mergington.edu"]
     }
 }
 
