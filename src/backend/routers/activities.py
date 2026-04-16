@@ -14,6 +14,29 @@ router = APIRouter(
 )
 
 
+def _times_overlap(start_a: str, end_a: str, start_b: str, end_b: str) -> bool:
+    """Check if two time ranges overlap."""
+    return start_a < end_b and start_b < end_a
+
+
+def _has_schedule_conflict(existing_activity: Dict[str, Any], new_activity: Dict[str, Any]) -> bool:
+    """Check whether two activities conflict on day and time."""
+    existing_schedule = existing_activity.get("schedule_details", {})
+    new_schedule = new_activity.get("schedule_details", {})
+
+    existing_days = set(existing_schedule.get("days", []))
+    new_days = set(new_schedule.get("days", []))
+    if not existing_days.intersection(new_days):
+        return False
+
+    return _times_overlap(
+        existing_schedule.get("start_time", ""),
+        existing_schedule.get("end_time", ""),
+        new_schedule.get("start_time", ""),
+        new_schedule.get("end_time", "")
+    )
+
+
 @router.get("", response_model=Dict[str, Any])
 @router.get("/", response_model=Dict[str, Any])
 def get_activities(
@@ -89,13 +112,39 @@ def signup_for_activity(activity_name: str, email: str, teacher_username: Option
         raise HTTPException(
             status_code=400, detail="Already signed up for this activity")
 
-    # Add student to participants
+    # Prevent double booking with overlapping schedule in another activity
+    existing_bookings = activities_collection.find(
+        {
+            "_id": {"$ne": activity_name},
+            "participants": email
+        }
+    )
+    for existing_activity in existing_bookings:
+        if _has_schedule_conflict(existing_activity, activity):
+            raise HTTPException(
+                status_code=400,
+                detail=f"Schedule conflict with {existing_activity['_id']}. Student is already booked for that time."
+            )
+
+    # Add student to participants with atomic guards to avoid duplicates and overbooking
     result = activities_collection.update_one(
-        {"_id": activity_name},
-        {"$push": {"participants": email}}
+        {
+            "_id": activity_name,
+            "participants": {"$ne": email},
+            "$expr": {"$lt": [{"$size": "$participants"}, "$max_participants"]}
+        },
+        {"$addToSet": {"participants": email}}
     )
 
     if result.modified_count == 0:
+        updated_activity = activities_collection.find_one({"_id": activity_name})
+        if updated_activity:
+            if email in updated_activity["participants"]:
+                raise HTTPException(
+                    status_code=400, detail="Already signed up for this activity")
+            if len(updated_activity["participants"]) >= updated_activity["max_participants"]:
+                raise HTTPException(
+                    status_code=400, detail="Activity is full")
         raise HTTPException(
             status_code=500, detail="Failed to update activity")
 
