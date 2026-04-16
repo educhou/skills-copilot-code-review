@@ -5,6 +5,8 @@ Endpoints for the High School Management System API
 from fastapi import APIRouter, HTTPException, Query
 from fastapi.responses import RedirectResponse
 from typing import Dict, Any, Optional, List
+from datetime import datetime
+import sys
 
 from ..database import activities_collection, teachers_collection
 
@@ -13,10 +15,20 @@ router = APIRouter(
     tags=["activities"]
 )
 
+UNLIMITED_CAPACITY = sys.maxsize
+
 
 def _times_overlap(start_a: str, end_a: str, start_b: str, end_b: str) -> bool:
     """Check if two time ranges overlap."""
-    return start_a < end_b and start_b < end_a
+    try:
+        parsed_start_a = datetime.strptime(start_a, "%H:%M").time()
+        parsed_end_a = datetime.strptime(end_a, "%H:%M").time()
+        parsed_start_b = datetime.strptime(start_b, "%H:%M").time()
+        parsed_end_b = datetime.strptime(end_b, "%H:%M").time()
+    except (TypeError, ValueError):
+        return False
+
+    return parsed_start_a < parsed_end_b and parsed_start_b < parsed_end_a
 
 
 def _has_schedule_conflict(existing_activity: Dict[str, Any], new_activity: Dict[str, Any]) -> bool:
@@ -131,7 +143,12 @@ def signup_for_activity(activity_name: str, email: str, teacher_username: Option
         {
             "_id": activity_name,
             "participants": {"$ne": email},
-            "$expr": {"$lt": [{"$size": "$participants"}, "$max_participants"]}
+            "$expr": {
+                "$lt": [
+                    {"$size": {"$ifNull": ["$participants", []]}},
+                    {"$ifNull": ["$max_participants", UNLIMITED_CAPACITY]}
+                ]
+            }
         },
         {"$addToSet": {"participants": email}}
     )
@@ -139,12 +156,14 @@ def signup_for_activity(activity_name: str, email: str, teacher_username: Option
     if result.modified_count == 0:
         updated_activity = activities_collection.find_one({"_id": activity_name})
         if updated_activity:
-            if email in updated_activity["participants"]:
+            participants = updated_activity.get("participants", [])
+            max_participants = updated_activity.get("max_participants")
+            if email in participants:
                 raise HTTPException(
                     status_code=400, detail="Already signed up for this activity")
-            if len(updated_activity["participants"]) >= updated_activity["max_participants"]:
+            if isinstance(max_participants, int) and len(participants) >= max_participants:
                 raise HTTPException(
-                    status_code=400, detail="Activity is full")
+                    status_code=400, detail=f"Activity {activity_name} is full")
         raise HTTPException(
             status_code=500, detail="Failed to update activity")
 
