@@ -665,6 +665,7 @@ footer {
   background-color: rgba(255, 255, 255, 0.3);
 }
 
+/* Announcement banner: site-wide notice displayed at the top of the page */
 .announcement-banner {
   background-color: #4caf50;
   color: white;
